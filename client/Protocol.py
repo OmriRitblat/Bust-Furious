@@ -11,14 +11,13 @@ MSG_OFFER   = 0x2
 MSG_REQUEST = 0x3
 MSG_PAYLOAD = 0x4
 
-DECISION_SIZE = 5  # "Hittt" / "Stand"
-
 # Results (server -> client)
 RESULT_NOT_OVER = 0x0
 RESULT_TIE      = 0x1
 RESULT_LOSS     = 0x2   # client lost
 RESULT_WIN      = 0x3   # client won
 
+DECISION_SIZE = 5  # exactly 5 bytes: "Hittt" / "Stand"
 
 # --------------------------
 # Data objects
@@ -39,26 +38,26 @@ class Card:
     suit: int  # 0-3
 
     def game_value(self) -> int:
-        # 2-10 -> numeric, J/Q/K -> 10, A -> 11
         if self.rank == 1:
             return 11
-        elif 2 <= self.rank <= 10:
+        if 2 <= self.rank <= 10:
             return self.rank
-        else:
-            return 10
+        return 10
 
 
 class Protocol:
     """
-    Client-side protocol: parse offers, send requests, send decisions, receive server payloads.
+    Client-side protocol with DIFFERENT payload formats:
+    - client->server: cookie(4) type(1) decision(5)  => 10 bytes
+    - server->client: cookie(4) type(1) result(1) rank(2) suit(1) => 8 bytes
     """
 
-    OFFER_FMT   = "!IBH32s"     # cookie(4) type(1) port(2) name(32)
+    OFFER_FMT = "!IBH32s"       # cookie(4) type(1) port(2) name(32)
     REQUEST_FMT = "!IBB32s"     # cookie(4) type(1) rounds(1) name(32)
 
-    # Payload (כמו אצלך בשרת): cookie(4) type(1) decision(5) result(1) rank(2) suit(1) = 14 bytes
-    # אתה בחרת signed בשרת (h,b), אז ניישר קו כדי שה-unpack תמיד יעבוד.
-    PAYLOAD_FMT = "!IB5sBhb"
+    # NEW payload formats
+    PAYLOAD_CLIENT_FMT = "!IB5s"   # 10 bytes
+    PAYLOAD_SERVER_FMT = "!IBBhb"  # 8 bytes (result=1, rank=2, suit=1) signed כמו אצלך
 
     @staticmethod
     def _fix_name(name: str) -> bytes:
@@ -91,30 +90,33 @@ class Protocol:
             Protocol._fix_name(req.client_name),
         )
 
-    # ---------- PAYLOAD ----------
+    # ---------- PAYLOAD: client -> server ----------
     @staticmethod
     def build_payload_from_client(decision: str) -> bytes:
-        # חייב להיות בדיוק 5 bytes: "Hittt" או "Stand"
         if decision not in ("Hittt", "Stand"):
             raise ValueError("decision must be 'Hittt' or 'Stand'")
-        decision_bytes = decision.encode("ascii")  # 5 bytes
-
-        # client לא משתמש ב-result/rank/suit -> נשים 0
+        decision_bytes = decision.encode("ascii")  # exactly 5 bytes
         return struct.pack(
-            Protocol.PAYLOAD_FMT,
+            Protocol.PAYLOAD_CLIENT_FMT,
             MAGIC_COOKIE,
             MSG_PAYLOAD,
-            decision_bytes,
-            0,  # result dummy
-            0,  # rank dummy
-            0   # suit dummy
+            decision_bytes
         )
 
+    # ---------- PAYLOAD: server -> client ----------
     @staticmethod
     def parse_payload_from_server(data: bytes) -> Optional[Tuple[int, Card]]:
-        if len(data) != struct.calcsize(Protocol.PAYLOAD_FMT):
+        if len(data) != struct.calcsize(Protocol.PAYLOAD_SERVER_FMT):
             return None
-        cookie, mtype, _decision, result, rank, suit = struct.unpack(Protocol.PAYLOAD_FMT, data)
+        cookie, mtype, result, rank, suit = struct.unpack(Protocol.PAYLOAD_SERVER_FMT, data)
         if cookie != MAGIC_COOKIE or mtype != MSG_PAYLOAD:
             return None
         return int(result), Card(rank=int(rank), suit=int(suit))
+
+    @staticmethod
+    def server_payload_size() -> int:
+        return struct.calcsize(Protocol.PAYLOAD_SERVER_FMT)
+
+    @staticmethod
+    def client_payload_size() -> int:
+        return struct.calcsize(Protocol.PAYLOAD_CLIENT_FMT)

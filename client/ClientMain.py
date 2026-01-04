@@ -63,7 +63,7 @@ def cards_str(cards):
 
 
 def play_round(conn: socket.socket, round_idx: int) -> RoundResult:
-    payload_size = struct.calcsize(Protocol.PAYLOAD_FMT)
+    payload_size = Protocol.server_payload_size()
     print(f"\n=== ROUND {round_idx} ===")
 
     init = []
@@ -85,7 +85,6 @@ def play_round(conn: socket.socket, round_idx: int) -> RoundResult:
     print(f"Your cards: {cards_str(player_cards)} (total={sum(c.game_value() for c in player_cards)})")
     print(f"Dealer up:  {dealer_up.rank}{SUITS[dealer_up.suit]}")
 
-    # תור שחקן: בכל Hit/Stand שולחים payload עם decision
     while True:
         total = sum(c.game_value() for c in player_cards)
 
@@ -101,7 +100,6 @@ def play_round(conn: socket.socket, round_idx: int) -> RoundResult:
         if decision == "Stand":
             break
 
-        # Hit -> השרת ישלח קלף נוסף לשחקן (NOT_OVER)
         raw = recv_exact(conn, payload_size)
         if not raw:
             print("[TCP] Disconnected while receiving hit card.")
@@ -124,7 +122,6 @@ def play_round(conn: socket.socket, round_idx: int) -> RoundResult:
         if total > 21:
             break
 
-    # אחרי Stand (או אחרי hitים): השרת שולח reveal/hits של דילר ואז תוצאה סופית
     while True:
         raw = recv_exact(conn, payload_size)
         if not raw:
@@ -179,7 +176,6 @@ def main():
     req = Request(rounds=rounds, client_name=name)
 
     conn.sendall(Protocol.build_request(req))
-    # אם אצלכם באמת שולחים '\n' אחרי request – אפשר להוסיף:
     # conn.sendall(b"\n")
 
     for i in range(1, rounds + 1):

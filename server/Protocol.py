@@ -1,11 +1,7 @@
-from ServerMain import Offer
-import socket
 import struct
-import threading
-import time
-import random
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
+from typing import Optional
+
 # --------------------------
 # Protocol
 # --------------------------
@@ -16,39 +12,66 @@ MSG_OFFER = 0x2
 MSG_REQUEST = 0x3
 MSG_PAYLOAD = 0x4
 
+DECISION_SIZE = 5  # "Hittt" / "Stand"
 
-# Payload decision sizes: "Hittt" or "Stand" = 5 bytes
-DECISION_SIZE = 5
 
-@dataclass 
-class Request: 
-    rounds: int 
-    client_name: str 
-@dataclass 
+@dataclass
+class Offer:
+    server_tcp_port: int
+    server_name: str
+
+
+@dataclass
+class Request:
+    rounds: int
+    client_name: str
+
+
+@dataclass
 class Card:
     rank: int  # 1-13
     suit: int  # 0-3
 
     def game_value(self) -> int:
-        # 2-10 -> numeric, J/Q/K -> 10, A -> 11
         if self.rank == 1:
             return 11
-        elif 2 <= self.rank <= 10:
+        if 2 <= self.rank <= 10:
             return self.rank
-        else:
-            return 10
+        return 10
 
 
 class Protocol:
     """
-    Encodes/decodes Offer/Request/Payload messages according to the hackathon spec. :contentReference[oaicite:1]{index=1}
+    Server-side protocol (with different payload structures):
+
+    client->server decision payload:
+      cookie(4) type(1) decision(5)                     => 10 bytes
+
+    server->client payload:
+      cookie(4) type(1) result(1) rank(2) suit(1)       => 8 bytes
     """
 
     OFFER_FMT = "!IBH32s"      # cookie(4) type(1) port(2) name(32)
     REQUEST_FMT = "!IBB32s"    # cookie(4) type(1) rounds(1) name(32)
-    # payload:
-    # cookie(4) type(1) decision(5) result(1) card_rank(2) card_suit(1)
-    PAYLOAD_FMT = "!IB5sBHb"   # We'll build manually to avoid signed issues on suit
+
+    PAYLOAD_CLIENT_FMT = "!IB5s"   # 10 bytes: decision only
+    PAYLOAD_SERVER_FMT = "!IBBhb"  # 8 bytes: result + rank + suit (signed like you used)
+
+    @staticmethod
+    def offer_size() -> int:
+        return struct.calcsize(Protocol.OFFER_FMT)
+
+    @staticmethod
+    def request_size() -> int:
+        return struct.calcsize(Protocol.REQUEST_FMT)
+
+    @staticmethod
+    def client_payload_size() -> int:
+        return struct.calcsize(Protocol.PAYLOAD_CLIENT_FMT)
+
+    @staticmethod
+    def server_payload_size() -> int:
+        return struct.calcsize(Protocol.PAYLOAD_SERVER_FMT)
 
     @staticmethod
     def _fix_name(name: str) -> bytes:
@@ -59,6 +82,7 @@ class Protocol:
     def _parse_name(b: bytes) -> str:
         return b.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
 
+    # ---------- OFFER ----------
     @staticmethod
     def build_offer(offer: Offer) -> bytes:
         return struct.pack(
@@ -69,6 +93,7 @@ class Protocol:
             Protocol._fix_name(offer.server_name),
         )
 
+    # ---------- REQUEST ----------
     @staticmethod
     def parse_request(data: bytes) -> Optional[Request]:
         if len(data) != struct.calcsize(Protocol.REQUEST_FMT):
@@ -76,34 +101,32 @@ class Protocol:
         cookie, mtype, rounds, name = struct.unpack(Protocol.REQUEST_FMT, data)
         if cookie != MAGIC_COOKIE or mtype != MSG_REQUEST:
             return None
-        return Request(rounds=rounds, client_name=Protocol._parse_name(name))
+        return Request(rounds=int(rounds), client_name=Protocol._parse_name(name))
 
+    # ---------- PAYLOAD: server -> client ----------
     @staticmethod
     def build_payload_from_server(result: int, card: Card) -> bytes:
-        decision = b"\x00" * DECISION_SIZE
-
+        # 8 bytes only
         return struct.pack(
-            "!IB5sBhb",
+            Protocol.PAYLOAD_SERVER_FMT,
             MAGIC_COOKIE,
             MSG_PAYLOAD,
-            decision,
-            result,
-            card.rank,   # signed short (2 bytes) - need to check that ok without unsigned
-            card.suit    # signed char  (1 byte)  - need to check that ok without unsigned
+            int(result) & 0xFF,
+            int(card.rank),
+            int(card.suit)
         )
 
-
+    # ---------- PAYLOAD: client -> server ----------
     @staticmethod
     def parse_payload_from_client(data: bytes) -> Optional[str]:
-        # Expect: cookie(4) type(1) decision(5) ... (client may still send full payload, but spec says decision is relevant)
-        if len(data) < 4 + 1 + 5:
+        # Expect exactly 10 bytes
+        if len(data) != struct.calcsize(Protocol.PAYLOAD_CLIENT_FMT):
             return None
-        cookie, mtype = struct.unpack("!IB", data[:5])
+        cookie, mtype, decision_raw = struct.unpack(Protocol.PAYLOAD_CLIENT_FMT, data)
         if cookie != MAGIC_COOKIE or mtype != MSG_PAYLOAD:
             return None
-        decision_raw = data[5:10]
+
         decision = decision_raw.decode("utf-8", errors="ignore")
-        # Must be exactly "Hittt" or "Stand"
         if decision not in ("Hittt", "Stand"):
             return None
         return decision

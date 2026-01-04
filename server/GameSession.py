@@ -146,8 +146,7 @@ class GameSession:
                 return RESULT_WIN
 
             # wait for client decision payload
-            payload_size = struct.calcsize(Protocol.PAYLOAD_FMT)  # 14
-            data = self._recv_exact(payload_size)
+            data = self._recv_exact(Protocol.client_payload_size())
             if not data:
                 print(f"[ROUND {round_idx} client='{client_name}] Client disconnected during decision.")
                 return RESULT_TIE
