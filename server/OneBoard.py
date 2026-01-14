@@ -70,7 +70,6 @@ class OneBoard:
         return deck
 
     def _ensure_deck(self, needed: int) -> None:
-        # אם אין מספיק קלפים, מתחילים חפיסה חדשה
         if len(self.deck) < needed:
             self.deck = self._new_shuffled_deck()
 

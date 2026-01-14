@@ -29,7 +29,7 @@ class Request:
 
 @dataclass
 class Card:
-    rank: int  # 1-13
+    rank: int  # 1-10
     suit: int  # 0-3
 
     def game_value(self) -> int:

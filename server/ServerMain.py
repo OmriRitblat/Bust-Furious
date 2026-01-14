@@ -20,7 +20,6 @@ class Offer:
 def get_local_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # לא חייב באמת להגיע ל-8.8.8.8, זה רק כדי שה-OS יבחר interface
         s.connect(("8.8.8.8", 80))
         return s.getsockname()[0]
     finally:
@@ -76,7 +75,6 @@ class ServerMain:
         offer_thread = OfferBroadcaster(tcp_port, self.team_name, self.stop_event)
         offer_thread.start()
 
-        # אם OneBoard – מרימים את הלוח פעם אחת
         board = None
         if mode == "ONEBOARD":
             board = OneBoard.OneBoard(self.team_name)
@@ -92,11 +90,9 @@ class ServerMain:
                     break
 
                 if mode == "ONEBOARD":
-                    # רישום שחקן ללוח משותף (לא לחסום את accept loop)
                     t = threading.Thread(target=self._handle_oneboard_join, args=(board, conn, addr), daemon=True)
                     t.start()
                 else:
-                    # לכל לקוח Session משלו
                     session = GameSession.GameSession(conn, addr, self.team_name)
                     t = threading.Thread(target=self._handle_session, args=(session,), daemon=True)
                     t.start()
@@ -131,9 +127,7 @@ class ServerMain:
     @staticmethod
     def _handle_oneboard_join(board: "OneBoard.OneBoard", conn: socket.socket, addr: Tuple[str, int]) -> None:
         try:
-            # add_player קורא request מהסוקט, לכן צריך לשמור את החיבור פתוח
             board.add_player(conn)
-            # מכאן והלאה הלוח משתמש ב-conn; לא סוגרים אותו פה
         except Exception as e:
             print(f"[ERROR] OneBoard add_player crashed from {addr}: {e}")
             try:
@@ -144,6 +138,6 @@ class ServerMain:
 
 if __name__ == "__main__":
     try:
-        ServerMain(team_name="AlphaTeam").run() # do we need timeout for message from user?????? in one board
+        ServerMain(team_name="AlphaTeam").run()
     except KeyboardInterrupt:
         print("\nShutting down...")
