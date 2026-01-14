@@ -175,7 +175,7 @@ class GameSession:
         if not self._send(Protocol.build_payload_from_server(RESULT_NOT_OVER, hidden)):
             return RESULT_TIE
 
-        while dealer_total <= 21 and GameLogic.dealer_should_hit(dealer_total, player_total):
+        while GameLogic.dealer_should_hit(dealer_total, player_total):
             newc = self._draw(deck)
             dealer.append(newc)
             dealer_total = self._sum_cards(dealer)
