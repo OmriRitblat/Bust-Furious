@@ -144,6 +144,6 @@ class ServerMain:
 
 if __name__ == "__main__":
     try:
-        ServerMain(team_name="AlphaTeam").run()
+        ServerMain(team_name="AlphaTeam").run() # do we need timeout for message from user?????? in one board
     except KeyboardInterrupt:
         print("\nShutting down...")

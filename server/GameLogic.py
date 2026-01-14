@@ -12,20 +12,26 @@ class GameLogic:
         :return: True if dealer should take another card
         """
 
-        # אם הדילר כבר עבר 21 – לא מושך
-        if dealer_total > 21:
+        if dealer_total > 17:
             return False
 
-        # חישוב הסכום המקסימלי של שחקן שלא עבר 21
         best_player = 0
         for hand in players_hands.values():
             total = sum(c.game_value() for c in hand)
             if total <= 21:
                 best_player = max(best_player, total)
 
-        # אם אין אף שחקן פעיל (כולם bust)
         if best_player == 0:
             return False
 
-        # הדילר מושך כל עוד הוא לא גדול מכולם
         return dealer_total <= best_player
+
+def dealer_should_hit(dealer_total: int, player_total: int) -> bool:
+    """
+    Module-level helper for single-player GameSession usage.
+    Return True when dealer should hit: dealer hasn't busted, the
+    player hasn't busted, and dealer total is <= player total.
+    """
+    if dealer_total > 17:
+        return False
+    return dealer_total <= player_total
